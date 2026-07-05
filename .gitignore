@@ -1,0 +1,24 @@
+# dependencies / build
+node_modules/
+.next/
+out/
+dist/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# local env / secrets (never commit)
+.env
+.env.*
+*.local
+
+# editor / OS / tooling
+.claude/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# postgres data (compose volume is named, but ignore any stray dumps)
+pgdata/
+*.sqlite

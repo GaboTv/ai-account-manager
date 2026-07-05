@@ -1,0 +1,46 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: aimgr
+      POSTGRES_PASSWORD: aimgr
+      POSTGRES_DB: aimgr
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/001_init.sql:/docker-entrypoint-initdb.d/001_init.sql:ro
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aimgr"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg://aimgr:aimgr@db:5432/aimgr
+      DOCKER_HOST: unix:///var/run/docker.sock
+      RUNNER_TZ: Europe/Madrid  # timezone shown in CLI usage/reset times (CEST)
+      USAGE_POLL_MINUTES: 15    # auto usage capture interval; 0 disables (each capture boots the TUI ~30s)
+    volumes:
+      # Docker socket ONLY here (control plane). Never in runner containers.
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:

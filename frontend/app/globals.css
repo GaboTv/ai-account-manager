@@ -1,0 +1,10 @@
+@import "tailwindcss";
+
+.usage-bar {
+  background: var(--bar-light);
+}
+@media (prefers-color-scheme: dark) {
+  .usage-bar {
+    background: var(--bar-dark);
+  }
+}
