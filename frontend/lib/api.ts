@@ -1,6 +1,15 @@
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 export const WS = API.replace(/^http/, "ws");
 
+const TOKEN_KEY = "aam_token";
+export const getToken = () =>
+  typeof window === "undefined" ? null : localStorage.getItem(TOKEN_KEY);
+export const setToken = (t: string) => localStorage.setItem(TOKEN_KEY, t);
+export const clearToken = () => localStorage.removeItem(TOKEN_KEY);
+
+// WebSocket URL with the auth token as a query param (WS can't send headers).
+export const wsUrl = (path: string) => `${WS}${path}?token=${encodeURIComponent(getToken() ?? "")}`;
+
 export interface Account {
   id: string;
   provider: "claude" | "codex" | "aiprimetech";
@@ -31,15 +40,41 @@ export interface AuthStart {
 }
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = getToken();
   const res = await fetch(`${API}${path}`, {
-    headers: { "Content-Type": "application/json" },
     ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(init?.headers ?? {}),
+    },
   });
+  if (res.status === 401) {
+    clearToken();
+    if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+      window.location.href = "/login";
+    }
+    throw new Error("Not authenticated");
+  }
   if (!res.ok) {
     const body = await res.json().catch(() => null);
     throw new Error(body?.error?.message ?? `HTTP ${res.status}`);
   }
   return res.status === 204 ? (undefined as T) : res.json();
+}
+
+export async function login(username: string, password: string): Promise<void> {
+  const res = await fetch(`${API}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.error?.message ?? "Login failed");
+  }
+  const { token } = await res.json();
+  setToken(token);
 }
 
 export const api = {

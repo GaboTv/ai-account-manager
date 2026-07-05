@@ -43,6 +43,8 @@ and the rationale behind every major decision.
 - **Credit-safe by design**: nothing automated ever sends a billable prompt.
   Only the free slash commands run on a schedule; message/exec paths are manual
   and clearly marked.
+- **Single-admin login**: signed bearer token guards the UI, REST API, and
+  WebSocket terminals; credentials from env vars.
 - **Security-first runners**: non-root, `cap_drop: ALL`, `no-new-privileges`,
   CPU/memory/pid limits, no published ports, no Docker socket, named volumes.
 - **No tokens in the database**: provider auth lives only in the per-account
@@ -93,9 +95,10 @@ docker compose up --build
 #   API: http://localhost:8000/docs
 ```
 
-Everything binds to `127.0.0.1`. There is **no app-level authentication** in the
-MVP — do not expose it beyond localhost without adding auth + TLS (see
-ARCHITECTURE.md § Deployment).
+Everything binds to `127.0.0.1`. A single-admin **login** protects the UI and
+API (default `admin` / `admin` — **change it**, see below). This is basic auth
+for a self-hosted operator, not multi-tenant; still add TLS before exposing it
+beyond localhost (see ARCHITECTURE.md § Deployment).
 
 ### Configuration
 
@@ -103,6 +106,9 @@ Set in `docker-compose.yml` (backend service):
 
 | Env var | Default | Purpose |
 |---|---|---|
+| `APP_USERNAME` / `APP_PASSWORD` | `admin` / `admin` | Login credential — **change before any non-localhost use** |
+| `APP_SECRET` | random per process | Token signing key. Set it to keep logins valid across restarts; unset means restart logs everyone out |
+| `APP_TOKEN_HOURS` | `12` | Login token lifetime |
 | `RUNNER_TZ` | `Europe/Madrid` | Timezone the CLIs render usage/reset times in |
 | `USAGE_POLL_MINUTES` | `2` | How often the backend re-captures usage (`0` disables). Not the display refresh — the accounts page re-renders every 10 s regardless. |
 | `DATABASE_URL` | compose-provided | Postgres connection |
@@ -147,7 +153,9 @@ ARCHITECTURE.md
 
 ## Security & limitations (read before deploying)
 
-- Localhost-only, no app auth, in the MVP. Add auth + TLS before any exposure.
+- Single-admin login guards the UI/API (signed bearer token, 12 h default).
+  It's basic auth for one operator — no user management, token in the browser's
+  localStorage, no rate limiting. Bind to localhost and add TLS before exposure.
 - Docker-daemon access is root-equivalent; the backend container holds the
   socket and must be treated accordingly.
 - Terminal/usage parsing is intentionally best-effort — CLI updates can change

@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlmodel import Session, SQLModel, select
 
+from . import appauth
 from . import db as dbm
 from .adapters import get_adapter
 from .auth_flow import AuthFlowService
@@ -48,9 +49,55 @@ async def unhandled_error_handler(request, exc: Exception):
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# --- app-level auth ---------------------------------------------------
+# Everything except these paths (and CORS preflight) requires a valid bearer
+# token. WebSockets aren't HTTP, so they authenticate via a ?token= param in
+# their own handlers.
+PUBLIC_PATHS = {"/health", "/auth/login", "/openapi.json", "/docs", "/redoc"}
+
+
+@app.middleware("http")
+async def require_auth_mw(request, call_next):
+    from fastapi.responses import JSONResponse
+
+    path = request.url.path
+    if request.method == "OPTIONS" or path in PUBLIC_PATHS or path.startswith("/docs"):
+        return await call_next(request)
+    auth = request.headers.get("Authorization", "")
+    token = auth[7:] if auth.startswith("Bearer ") else None
+    if not appauth.valid_token(token):
+        origin = request.headers.get("origin")
+        headers = {"Access-Control-Allow-Origin": origin,
+                   "Access-Control-Allow-Credentials": "true"} if origin == ALLOWED_ORIGIN else {}
+        return JSONResponse(
+            status_code=401,
+            content={"error": {"code": "UNAUTHORIZED", "message": "Login required", "details": {}}},
+            headers=headers,
+        )
+    return await call_next(request)
+
+
+class LoginBody(BaseModel):
+    username: str
+    password: str
+
+
+@app.post("/auth/login")
+def login(body: LoginBody):
+    if not appauth.check_credentials(body.username, body.password):
+        raise ApiError("UNAUTHORIZED", "Invalid username or password", 401)
+    return {"token": appauth.issue_token(body.username)}
+
+
+@app.get("/auth/me")
+def auth_me():
+    return {"ok": True}  # reaching here means the middleware accepted the token
+
 
 docker_svc: DockerService | None = None
 pty_mgr: PtyManager | None = None
@@ -533,6 +580,11 @@ def account_exec(account_id: str, body: MessageBody, db: Session = Depends(get_s
 
 async def _bridge_ws(ws: WebSocket, session_id: str):
     """Shared xterm.js <-> PTY bridge for terminal and auth sockets."""
+    # WS can't send an Authorization header from the browser, so the token
+    # comes as a query param (?token=…). Validate before accepting.
+    if not appauth.valid_token(ws.query_params.get("token")):
+        await ws.close(code=4401)
+        return
     await ws.accept()
     try:
         session = pty_mgr.get(session_id)

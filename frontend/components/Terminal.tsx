@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef } from "react";
 import "@xterm/xterm/css/xterm.css";
-import { WS } from "@/lib/api";
+import { wsUrl } from "@/lib/api";
 
 // xterm accesses `self` at module scope, so it must be imported in the
 // browser only — never during SSR.
@@ -33,8 +33,8 @@ export default function Terminal({ sessionId, kind = "sessions" }: {
 
       const url =
         kind === "auth"
-          ? `${WS}/ws/auth/${sessionId}`
-          : `${WS}/ws/sessions/${sessionId}/terminal`;
+          ? wsUrl(`/ws/auth/${sessionId}`)
+          : wsUrl(`/ws/sessions/${sessionId}/terminal`);
       ws = new WebSocket(url);
       ws.binaryType = "arraybuffer";
 

@@ -36,6 +36,7 @@ Docker Engine
 | PTY / session manager, headless slash-capture | `backend/app/pty_manager.py` |
 | Auth-flow service (login, callback forwarding) | `backend/app/auth_flow.py` |
 | Provider adapters (all CLI-specific knowledge) | `backend/app/adapters.py` |
+| App-level auth (login token, middleware, WS guard) | `backend/app/appauth.py` |
 | Secret redaction | `backend/app/redact.py` |
 | Structured errors | `backend/app/errors.py` |
 | DB models + audit helper | `backend/app/db.py` |
@@ -111,6 +112,11 @@ are real environment variables.
 
 ## Security model
 
+- App login: a single admin credential (env `APP_USERNAME`/`APP_PASSWORD`)
+  issues an HMAC-signed, expiring bearer token (`appauth.py`, itsdangerous).
+  An HTTP middleware rejects every request without a valid token except
+  `/auth/login`, `/health`, and docs; WebSockets validate a `?token=` param
+  before accepting. `APP_SECRET` signs tokens (random per process if unset).
 - Runner containers: non-root `agent`, `no-new-privileges:true`,
   `cap_drop: ALL`, `pids_limit`, CPU/memory limits, bridge network with no
   published ports, no host mounts, **no docker.sock**.
@@ -142,7 +148,8 @@ AI Prime Tech) and `/status` (Codex). The message and `exec` paths (`claude -p`,
 - [x] Redaction on persisted/logged output; secret input never logged
 - [x] Audit log on all mutations; account-name regex blocks name injection
 - [x] Credit-consuming actions are manual and flagged
-- [ ] App-level auth (MVP is localhost-only — bind 127.0.0.1)
+- [x] App-level login (single admin, signed bearer token) on UI + API + WS
+- [ ] Multi-user / roles, login rate limiting, token in httpOnly cookie
 - [ ] Volume encryption at rest (host-level: LUKS/BitLocker)
 - [ ] TLS if ever exposed beyond localhost
 
@@ -237,7 +244,10 @@ Docker is mocked; live verification uses real containers.
    is always shown and regexes are centralized in adapters. Pin CLI versions.
 2. **PTY sessions are in-memory.** A backend restart orphans exec processes;
    audit rows survive. Orphaned CLI processes may accumulate in a container.
-3. **No app-level auth.** Localhost binding is the only gate in the MVP.
+3. **Basic app auth only.** A single-admin login (signed bearer token in
+   `appauth.py`; HTTP middleware + WS `?token=` guard) gates the UI/API. No
+   multi-user, no rate limiting, token in localStorage. Bind localhost + TLS
+   before exposure.
 4. **Volumes are unencrypted** unless the host disk is.
 5. **Codex sandbox (bwrap)** can't create user namespaces on Docker Desktop's
    kernel; the runner container is the isolation boundary instead.

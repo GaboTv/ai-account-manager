@@ -23,6 +23,10 @@ services:
       DOCKER_HOST: unix:///var/run/docker.sock
       RUNNER_TZ: Europe/Madrid  # timezone shown in CLI usage/reset times (CEST)
       USAGE_POLL_MINUTES: 2     # how often the backend actually re-captures usage; 0 disables (each capture boots the TUI ~30s)
+      # --- app login (CHANGE THESE) ---
+      APP_USERNAME: admin
+      APP_PASSWORD: admin       # change before any non-localhost use
+      # APP_SECRET: <set to persist login tokens across restarts; random per-process if unset>
     volumes:
       # Docker socket ONLY here (control plane). Never in runner containers.
       - /var/run/docker.sock:/var/run/docker.sock
