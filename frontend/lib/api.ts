@@ -1,14 +1,10 @@
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 export const WS = API.replace(/^http/, "ws");
 
-const TOKEN_KEY = "aam_token";
-export const getToken = () =>
-  typeof window === "undefined" ? null : localStorage.getItem(TOKEN_KEY);
-export const setToken = (t: string) => localStorage.setItem(TOKEN_KEY, t);
-export const clearToken = () => localStorage.removeItem(TOKEN_KEY);
-
-// WebSocket URL with the auth token as a query param (WS can't send headers).
-export const wsUrl = (path: string) => `${WS}${path}?token=${encodeURIComponent(getToken() ?? "")}`;
+// Auth is a httpOnly cookie set by the backend — JS can't read it (XSS-safe),
+// so requests just send credentials and the browser attaches the cookie. The
+// WS handshake carries the same cookie, so no token in the URL.
+export const wsUrl = (path: string) => `${WS}${path}`;
 
 export interface Account {
   id: string;
@@ -40,17 +36,12 @@ export interface AuthStart {
 }
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = getToken();
   const res = await fetch(`${API}${path}`, {
+    credentials: "include",
     ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(init?.headers ?? {}),
-    },
+    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
   });
   if (res.status === 401) {
-    clearToken();
     if (typeof window !== "undefined" && window.location.pathname !== "/login") {
       window.location.href = "/login";
     }
@@ -66,6 +57,7 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 export async function login(username: string, password: string): Promise<void> {
   const res = await fetch(`${API}/auth/login`, {
     method: "POST",
+    credentials: "include",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username, password }),
   });
@@ -73,9 +65,22 @@ export async function login(username: string, password: string): Promise<void> {
     const body = await res.json().catch(() => null);
     throw new Error(body?.error?.message ?? "Login failed");
   }
-  const { token } = await res.json();
-  setToken(token);
 }
+
+export async function logout(): Promise<void> {
+  await fetch(`${API}/auth/logout`, { method: "POST", credentials: "include" }).catch(() => {});
+}
+
+export interface Me { username: string | null }
+export const me = () => req<Me>("/auth/me");
+
+export interface User { id: string; username: string; created_at?: string }
+export const usersApi = {
+  list: () => req<User[]>("/users"),
+  create: (username: string, password: string) =>
+    req<User>("/users", { method: "POST", body: JSON.stringify({ username, password }) }),
+  remove: (id: string) => req<void>(`/users/${id}`, { method: "DELETE" }),
+};
 
 export const api = {
   listAccounts: () => req<Account[]>("/accounts"),

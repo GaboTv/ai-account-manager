@@ -2,11 +2,11 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { getToken, clearToken } from "@/lib/api";
+import { me, logout } from "@/lib/api";
 
-// Client-side guard: the token lives in localStorage, so routing decisions
-// must happen in the browser. Renders nothing until the check resolves to
-// avoid flashing protected content.
+// The auth cookie is httpOnly, so the client can't read it — it asks the
+// backend (/auth/me) who it is. Renders nothing until the check resolves so
+// protected content never flashes.
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<"checking" | "authed" | "login">("checking");
   const pathname = usePathname();
@@ -15,11 +15,14 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (pathname === "/login") {
       setState("login");
-    } else if (!getToken()) {
-      router.replace("/login");
-    } else {
-      setState("authed");
+      return;
     }
+    me()
+      .then((r) => {
+        if (r.username) setState("authed");
+        else router.replace("/login");
+      })
+      .catch(() => router.replace("/login"));
   }, [pathname, router]);
 
   if (state === "checking") return null;
@@ -31,9 +34,10 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
         <Link href="/" className="font-bold">AI Account Manager</Link>
         <Link href="/accounts">Accounts</Link>
         <Link href="/create">New account</Link>
+        <Link href="/users">Users</Link>
         <button
           className="ml-auto text-sm text-red-600"
-          onClick={() => { clearToken(); router.replace("/login"); }}
+          onClick={async () => { await logout(); router.replace("/login"); }}
         >
           Log out
         </button>

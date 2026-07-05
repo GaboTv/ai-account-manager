@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 import uuid
 
-from fastapi import Depends, FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlmodel import Session, SQLModel, select
@@ -58,7 +58,16 @@ app.add_middleware(
 # Everything except these paths (and CORS preflight) requires a valid bearer
 # token. WebSockets aren't HTTP, so they authenticate via a ?token= param in
 # their own handlers.
-PUBLIC_PATHS = {"/health", "/auth/login", "/openapi.json", "/docs", "/redoc"}
+PUBLIC_PATHS = {"/health", "/auth/login", "/auth/logout", "/openapi.json", "/docs", "/redoc"}
+
+
+def _request_token(request) -> str | None:
+    """Token from the httpOnly cookie (browser) or a Bearer header (scripts)."""
+    cookie = request.cookies.get(appauth.COOKIE_NAME)
+    if cookie:
+        return cookie
+    auth = request.headers.get("Authorization", "")
+    return auth[7:] if auth.startswith("Bearer ") else None
 
 
 @app.middleware("http")
@@ -68,9 +77,7 @@ async def require_auth_mw(request, call_next):
     path = request.url.path
     if request.method == "OPTIONS" or path in PUBLIC_PATHS or path.startswith("/docs"):
         return await call_next(request)
-    auth = request.headers.get("Authorization", "")
-    token = auth[7:] if auth.startswith("Bearer ") else None
-    if not appauth.valid_token(token):
+    if not appauth.valid_token(_request_token(request)):
         origin = request.headers.get("origin")
         headers = {"Access-Control-Allow-Origin": origin,
                    "Access-Control-Allow-Credentials": "true"} if origin == ALLOWED_ORIGIN else {}
@@ -87,16 +94,79 @@ class LoginBody(BaseModel):
     password: str
 
 
+class UserCreate(BaseModel):
+    username: str
+    password: str
+
+
+def _set_auth_cookie(response, token: str):
+    response.set_cookie(
+        appauth.COOKIE_NAME, token, max_age=appauth.TOKEN_MAX_AGE,
+        httponly=True, samesite="lax", secure=appauth.COOKIE_SECURE, path="/",
+    )
+
+
 @app.post("/auth/login")
-def login(body: LoginBody):
-    if not appauth.check_credentials(body.username, body.password):
+def login(body: LoginBody, request: Request, response: Response,
+          db: Session = Depends(get_session)):
+    ip = (request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+          or (request.client.host if request.client else "unknown"))
+    # Key by IP+username so brute-forcing one account can't lock out others.
+    # (Docker NATs all host traffic to one gateway IP, so IP alone would be
+    # effectively global.)
+    key = f"{ip}|{body.username}"
+    if appauth.is_locked(key):
+        raise ApiError("RATE_LIMITED",
+                       "Too many failed attempts. Try again later.", 429)
+    user = db.exec(select(dbm.User).where(dbm.User.username == body.username)).first()
+    if not user or not appauth.verify_password(body.password, user.password_hash):
+        appauth.record_failure(key)
         raise ApiError("UNAUTHORIZED", "Invalid username or password", 401)
-    return {"token": appauth.issue_token(body.username)}
+    appauth.clear_failures(key)
+    token = appauth.issue_token(user.username)
+    _set_auth_cookie(response, token)
+    return {"token": token, "username": user.username}  # token also returned for API/curl clients
+
+
+@app.post("/auth/logout")
+def logout(response: Response):
+    response.delete_cookie(appauth.COOKIE_NAME, path="/")
+    return {"status": "logged_out"}
 
 
 @app.get("/auth/me")
-def auth_me():
-    return {"ok": True}  # reaching here means the middleware accepted the token
+def auth_me(request: Request):
+    return {"username": appauth.token_user(_request_token(request))}
+
+
+# ---- user management -------------------------------------------------
+
+
+@app.get("/users")
+def list_users(db: Session = Depends(get_session)):
+    return [{"id": str(u.id), "username": u.username, "created_at": u.created_at}
+            for u in db.exec(select(dbm.User).order_by(dbm.User.created_at)).all()]
+
+
+@app.post("/users", status_code=201)
+def create_user(body: UserCreate, db: Session = Depends(get_session)):
+    if not body.username.strip() or len(body.password) < 6:
+        raise ApiError("INVALID_NAME", "Username required; password min 6 chars", 422)
+    if db.exec(select(dbm.User).where(dbm.User.username == body.username)).first():
+        raise ApiError("NAME_TAKEN", f"User {body.username} already exists", 409)
+    user = dbm.User(username=body.username, password_hash=appauth.hash_password(body.password))
+    db.add(user); db.commit(); db.refresh(user)
+    return {"id": str(user.id), "username": user.username}
+
+
+@app.delete("/users/{user_id}", status_code=204)
+def delete_user(user_id: str, db: Session = Depends(get_session)):
+    user = db.get(dbm.User, uuid.UUID(user_id))
+    if not user:
+        raise ApiError("ACCOUNT_NOT_FOUND", "No such user", 404)
+    if len(db.exec(select(dbm.User)).all()) <= 1:
+        raise ApiError("LAST_USER", "Cannot delete the only user", 409)
+    db.delete(user); db.commit()
 
 
 docker_svc: DockerService | None = None
@@ -167,6 +237,13 @@ def startup():
             "ALTER TABLE usage_snapshots ADD CONSTRAINT usage_snapshots_account_id_fkey "
             "FOREIGN KEY (account_id) REFERENCES ai_accounts(id) ON DELETE CASCADE"
         ))
+    # Bootstrap: seed the first user from env if the users table is empty.
+    with Session(engine) as db:
+        if not db.exec(select(dbm.User)).first():
+            db.add(dbm.User(username=appauth.APP_USERNAME,
+                            password_hash=appauth.hash_password(appauth.APP_PASSWORD)))
+            db.commit()
+
     docker_svc = DockerService()
     pty_mgr = PtyManager(docker_svc)
     auth_svc = AuthFlowService(pty_mgr)
@@ -580,9 +657,10 @@ def account_exec(account_id: str, body: MessageBody, db: Session = Depends(get_s
 
 async def _bridge_ws(ws: WebSocket, session_id: str):
     """Shared xterm.js <-> PTY bridge for terminal and auth sockets."""
-    # WS can't send an Authorization header from the browser, so the token
-    # comes as a query param (?token=…). Validate before accepting.
-    if not appauth.valid_token(ws.query_params.get("token")):
+    # The browser sends the httpOnly cookie on the WS handshake; a ?token=
+    # query param is accepted as a fallback (e.g. non-browser clients).
+    token = ws.cookies.get(appauth.COOKIE_NAME) or ws.query_params.get("token")
+    if not appauth.valid_token(token):
         await ws.close(code=4401)
         return
     await ws.accept()

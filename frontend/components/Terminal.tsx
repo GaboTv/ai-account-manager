@@ -35,7 +35,7 @@ export default function Terminal({ sessionId, kind = "sessions" }: {
         kind === "auth"
           ? wsUrl(`/ws/auth/${sessionId}`)
           : wsUrl(`/ws/sessions/${sessionId}/terminal`);
-      ws = new WebSocket(url);
+      ws = new WebSocket(url); // auth cookie rides the handshake
       ws.binaryType = "arraybuffer";
 
       ws.onopen = () =>

@@ -112,11 +112,16 @@ are real environment variables.
 
 ## Security model
 
-- App login: a single admin credential (env `APP_USERNAME`/`APP_PASSWORD`)
-  issues an HMAC-signed, expiring bearer token (`appauth.py`, itsdangerous).
-  An HTTP middleware rejects every request without a valid token except
-  `/auth/login`, `/health`, and docs; WebSockets validate a `?token=` param
-  before accepting. `APP_SECRET` signs tokens (random per process if unset).
+- App login (`appauth.py`): multi-user accounts in the `users` table with
+  bcrypt-hashed passwords (first user seeded from env). Login issues an
+  HMAC-signed, expiring token (itsdangerous, key `APP_SECRET`) delivered as an
+  **httpOnly cookie** — JS/XSS can't read it. An HTTP middleware rejects every
+  request without a valid token except `/auth/login`, `/auth/logout`,
+  `/health`, and docs; WebSockets read the same cookie from the handshake.
+  Brute force is throttled by an in-memory per-(IP+username) lockout.
+- TLS (optional): a Caddy proxy (`docker-compose.tls.yml`) terminates HTTPS on
+  one origin and proxies `/api/*` → backend, else → frontend, so the cookie is
+  `Secure` + same-site and CORS disappears.
 - Runner containers: non-root `agent`, `no-new-privileges:true`,
   `cap_drop: ALL`, `pids_limit`, CPU/memory limits, bridge network with no
   published ports, no host mounts, **no docker.sock**.
@@ -148,15 +153,18 @@ AI Prime Tech) and `/status` (Codex). The message and `exec` paths (`claude -p`,
 - [x] Redaction on persisted/logged output; secret input never logged
 - [x] Audit log on all mutations; account-name regex blocks name injection
 - [x] Credit-consuming actions are manual and flagged
-- [x] App-level login (single admin, signed bearer token) on UI + API + WS
-- [ ] Multi-user / roles, login rate limiting, token in httpOnly cookie
+- [x] Multi-user login (bcrypt) on UI + API + WS; token in httpOnly cookie
+- [x] Brute-force lockout on login (per IP+username)
+- [x] TLS available via the Caddy proxy overlay
+- [ ] Roles/permissions (all users are equal), server-side token revocation
 - [ ] Volume encryption at rest (host-level: LUKS/BitLocker)
-- [ ] TLS if ever exposed beyond localhost
 
 ## Data model (PostgreSQL)
 
 `db/001_init.sql` + SQLModel models in `db.py`:
 
+- **`users`** — app operators: username (unique), bcrypt `password_hash`,
+  `created_at`. No provider data here.
 - **`ai_accounts`** — provider, name, container/volume names, limits, status,
   `auth_status`, `auth_info` (JSONB: method/base_url/email/plan — no tokens),
   `usage_info` (JSONB: parsed limits + session stats). `provider` CHECK allows
@@ -234,9 +242,13 @@ Docker is mocked; live verification uses real containers.
 
 - MVP: `docker compose up` on one host; all ports on 127.0.0.1.
 - The backend needs the Docker socket — treat it as root-equivalent; never
-  expose port 8000 beyond localhost without authentication.
-- Hardening order before exposure: app auth (OIDC / reverse-proxy) → TLS →
-  a Docker socket proxy limiting endpoints → Portainer/multi-host if needed.
+  expose port 8000 beyond localhost.
+- HTTPS: `docker compose -f docker-compose.yml -f docker-compose.tls.yml
+  --profile tls up --build` puts a Caddy proxy in front on `:8443` (sets
+  `APP_COOKIE_SECURE=1`, rebuilds the frontend against the same origin).
+- Further hardening before wider exposure: trust Caddy's CA or use a real cert,
+  a Docker socket proxy limiting endpoints, roles + server-side token
+  revocation, and Portainer/multi-host if needed.
 
 ## Known limitations & risks
 
@@ -244,10 +256,10 @@ Docker is mocked; live verification uses real containers.
    is always shown and regexes are centralized in adapters. Pin CLI versions.
 2. **PTY sessions are in-memory.** A backend restart orphans exec processes;
    audit rows survive. Orphaned CLI processes may accumulate in a container.
-3. **Basic app auth only.** A single-admin login (signed bearer token in
-   `appauth.py`; HTTP middleware + WS `?token=` guard) gates the UI/API. No
-   multi-user, no rate limiting, token in localStorage. Bind localhost + TLS
-   before exposure.
+3. **App auth is per-user but flat.** Multi-user login with bcrypt + httpOnly
+   cookie + brute-force lockout (`appauth.py`), TLS via the Caddy overlay. No
+   roles, and tokens are stateless (deleting a user takes effect on token
+   expiry ≤12 h, not instantly). Add server-side revocation for stricter needs.
 4. **Volumes are unencrypted** unless the host disk is.
 5. **Codex sandbox (bwrap)** can't create user namespaces on Docker Desktop's
    kernel; the runner container is the isolation boundary instead.

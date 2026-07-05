@@ -5,3 +5,4 @@ psycopg[binary]>=3.1
 docker==7.1.0
 pydantic>=2.7
 itsdangerous>=2.1
+bcrypt>=4.1

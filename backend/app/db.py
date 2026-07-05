@@ -19,6 +19,15 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+class User(SQLModel, table=True):
+    """An app operator. Password stored only as a bcrypt hash."""
+    __tablename__ = "users"
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    username: str = Field(unique=True, index=True)
+    password_hash: str
+    created_at: datetime = Field(default_factory=utcnow)
+
+
 class AIAccount(SQLModel, table=True):
     __tablename__ = "ai_accounts"
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)

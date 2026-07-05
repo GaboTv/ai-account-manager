@@ -1,0 +1,21 @@
+# TLS-terminating reverse proxy (optional). Serves everything from ONE HTTPS
+# origin so the auth cookie can be Secure + same-site and there is no CORS.
+# Caddy's internal CA issues a localhost cert (browser will warn unless you
+# trust Caddy's root — run `caddy trust`, or accept the warning locally).
+#
+# Enable with: docker compose -f docker-compose.yml -f docker-compose.tls.yml --profile tls up --build
+# Then open https://localhost:8443  (direct :3000/:8000 still work without this).
+
+localhost:8443 {
+	tls internal
+
+	# API + WebSockets: strip the /api prefix and proxy to the backend.
+	handle_path /api/* {
+		reverse_proxy backend:8000
+	}
+
+	# Everything else is the Next.js frontend.
+	handle {
+		reverse_proxy frontend:3000
+	}
+}

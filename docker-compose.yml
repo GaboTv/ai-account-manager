@@ -23,10 +23,15 @@ services:
       DOCKER_HOST: unix:///var/run/docker.sock
       RUNNER_TZ: Europe/Madrid  # timezone shown in CLI usage/reset times (CEST)
       USAGE_POLL_MINUTES: 2     # how often the backend actually re-captures usage; 0 disables (each capture boots the TUI ~30s)
-      # --- app login (CHANGE THESE) ---
+      # --- app login ---
+      # Seeds the FIRST user if the users table is empty. After that, manage
+      # users in the UI (/users). CHANGE THESE before first run.
       APP_USERNAME: admin
-      APP_PASSWORD: admin       # change before any non-localhost use
+      APP_PASSWORD: admin
+      APP_COOKIE_SECURE: "0"    # set to 1 when served over HTTPS (see docker-compose.tls.yml)
       # APP_SECRET: <set to persist login tokens across restarts; random per-process if unset>
+      # APP_LOGIN_MAX_FAILS: 5  # lockout threshold per IP
+      # APP_LOGIN_LOCK_SECONDS: 900
     volumes:
       # Docker socket ONLY here (control plane). Never in runner containers.
       - /var/run/docker.sock:/var/run/docker.sock
