@@ -135,6 +135,36 @@ class PtyManager:
         s = self.get(session_id)
         s.close()
 
+    def reap_orphans(self, account_id: str, container_name: str,
+                     exclude_session_id: str | None = None) -> bool:
+        """Kill leftover CLI processes (claude/codex/node) in the account's
+        container — but ONLY when no other session for that account is still
+        active, since one account = one container and a blanket kill would
+        take out a sibling session's process.
+
+        Closing a docker-exec socket does not terminate the exec'd process, so
+        without this the TUIs accumulate and inflate idle memory. Returns True
+        if a reap was attempted. Also prunes finished sessions from the map.
+        """
+        active = [
+            s for s in self.sessions.values()
+            if s.account_id == account_id and s.status == "active"
+            and s.id != exclude_session_id
+        ]
+        # prune non-active sessions for this account so the map doesn't grow
+        for sid in [s.id for s in self.sessions.values()
+                    if s.account_id == account_id and s.status != "active"]:
+            self.sessions.pop(sid, None)
+        if active:
+            return False  # a sibling session is live; leave its process alone
+        try:
+            # procps `pkill -f` matches the pattern (ERE) against full cmdline.
+            # PID 1 is `sleep infinity` under tini, so it is never matched.
+            self.docker.exec_run(container_name, ["pkill", "-9", "-f", "claude|codex|node"])
+        except Exception:
+            pass  # container gone / not running / nothing to kill
+        return True
+
     async def run_slash_capture(
         self,
         account,
@@ -173,6 +203,10 @@ class PtyManager:
             except Exception:
                 pass
             session.close()
+            # Ctrl+C may not fully exit the TUI; reap the leftover process
+            # (and any orphans) if the container is otherwise idle.
+            self.reap_orphans(str(account.id), account.container_name,
+                              exclude_session_id=session.id)
 
     async def _settle(self, session: PtySession, responders, quiet: float, timeout: float):
         """Wait until output has been quiet for `quiet` seconds. While

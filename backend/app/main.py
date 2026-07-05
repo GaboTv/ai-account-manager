@@ -431,13 +431,19 @@ def session_slash(session_id: str, body: SlashBody, db: Session = Depends(get_se
 @app.delete("/sessions/{session_id}", status_code=204)
 def close_session(session_id: str, db: Session = Depends(get_session)):
     s = pty_mgr.get(session_id)
+    account_id = s.account_id
     pty_mgr.close(session_id)
+    # Reap the session's CLI process (closing the socket doesn't kill it),
+    # unless another session for this account is still active.
+    acct = db.get(AIAccount, uuid.UUID(account_id))
+    if acct:
+        pty_mgr.reap_orphans(account_id, acct.container_name, exclude_session_id=session_id)
     row = db.get(AISession, uuid.UUID(session_id))
     if row:
         row.status = "closed"
         row.ended_at = dbm.utcnow()
         db.add(row); db.commit()
-    audit(db, "session.close", uuid.UUID(s.account_id))
+    audit(db, "session.close", uuid.UUID(account_id))
 
 
 async def _capture_usage(acct: AIAccount, db: Session) -> tuple[dict, str]:
