@@ -29,7 +29,7 @@ class AIAccount(SQLModel, table=True):
     auth_volume: str
     workspace_volume: str
     cpu_limit: float = 1
-    memory_limit_mb: int = 1024
+    memory_limit_mb: int = 768
     status: str = "created"
     auth_status: str = "unknown"
     # parsed provider metadata (email, plan, auth method) — never tokens

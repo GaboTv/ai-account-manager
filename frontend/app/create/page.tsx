@@ -54,8 +54,9 @@ export default function CreatePage() {
     setStep("creating");
     try {
       bump(15, "Creating account…");
-      // Lean defaults: runners idle near-zero CPU and peak well under 1 GiB.
-      const acct = await api.createAccount({ provider, name, cpu_limit: 1, memory_limit_mb: 1024 });
+      // Lean defaults: idle runners are ~7 MiB (CLI procs reaped); the cap
+      // only needs to cover a transient TUI boot (~400-500 MiB).
+      const acct = await api.createAccount({ provider, name, cpu_limit: 1, memory_limit_mb: 768 });
       setAccount(acct);
 
       bump(45, "Creating container and volumes…");

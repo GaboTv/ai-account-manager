@@ -10,7 +10,7 @@ CREATE TABLE ai_accounts (
     auth_volume      TEXT NOT NULL,
     workspace_volume TEXT NOT NULL,
     cpu_limit        REAL NOT NULL DEFAULT 1,
-    memory_limit_mb  INTEGER NOT NULL DEFAULT 1024,
+    memory_limit_mb  INTEGER NOT NULL DEFAULT 768,
     status           TEXT NOT NULL DEFAULT 'created',      -- created|running|stopped|error
     auth_status      TEXT NOT NULL DEFAULT 'unknown',      -- unknown|logged_in|logged_out|expired
     auth_info        JSONB NOT NULL DEFAULT '{}',          -- parsed metadata (email, plan) — never tokens
