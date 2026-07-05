@@ -40,6 +40,27 @@ and the rationale behind every major decision.
 - **No tokens in the database**: provider auth lives only in the per-account
   home volume. The DB stores metadata and redacted audit events.
 
+## Screenshots
+
+### Create wizard
+
+Pick a provider, name the account, and the wizard builds the container and walks
+you through login (`Name › Create › Login › Done`).
+
+![Create wizard](docs/screenshots/create-wizard.png)
+
+Other views (not shown here because they display live account data — add your own
+scrubbed captures to `docs/screenshots/`):
+
+- **Dashboard** — total/running/authenticated counts and per-day usage charts
+  for the current month.
+- **Accounts** — cards with provider badge, running/auth chips, live usage bars,
+  a "updated Xs ago" label, and lifecycle actions. Auto-refreshes every 10 s.
+- **Terminal** — interactive xterm.js session with free `/usage` and `/status`
+  buttons and a (credit-flagged) message box.
+- **Login modal** — login URL, device/paste-back code, live terminal, and the
+  code / localhost-callback input.
+
 ## Stack
 
 - **Frontend**: Next.js (App Router) · React · TypeScript · Tailwind CSS · xterm.js
