@@ -54,7 +54,8 @@ export default function CreatePage() {
     setStep("creating");
     try {
       bump(15, "Creating account…");
-      const acct = await api.createAccount({ provider, name, cpu_limit: 2, memory_limit_mb: 2048 });
+      // Lean defaults: runners idle near-zero CPU and peak well under 1 GiB.
+      const acct = await api.createAccount({ provider, name, cpu_limit: 1, memory_limit_mb: 1024 });
       setAccount(acct);
 
       bump(45, "Creating container and volumes…");
