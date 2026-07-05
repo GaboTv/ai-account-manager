@@ -186,10 +186,17 @@ Schema changes since v1 are applied by idempotent startup migrations in
 - Adapters parse limit gauges (`used_percent`, `resets`) and session stats
   (cost, input/output tokens). Codex reports "% left" (normalized to used);
   Claude reports "% used". Reset times render in `RUNNER_TZ`.
-- A background poller (`USAGE_POLL_MINUTES`) captures usage for running,
-  logged-in accounts and snapshots it. The accounts page polls the display
-  every 10 s (cheap) — captures stay on the poller because each boots the TUI
-  (~30 s).
+- **Two distinct refresh rates:**
+  - *Data capture* — a background poller re-captures usage for running,
+    logged-in accounts every `USAGE_POLL_MINUTES` (default **2 min**) and
+    snapshots it. This is the only thing that produces new numbers; each
+    capture boots the TUI (~30 s per account), so it can't run every few
+    seconds. A manual **📊 Usage** click forces an immediate capture.
+  - *Display refresh* — the accounts page re-fetches the account list and ticks
+    the "updated Xs ago" label every **10 s**. This is a cheap DB read that
+    only re-renders what's already stored; it never triggers a capture. The 10 s
+    tick is why the UI looks live even though numbers change at most every
+    2 minutes.
 - **AI Prime Tech limitation:** `/usage` shows only per-session token counts
   (the proxy exposes no plan-limit bars and no usage API), so a fresh headless
   capture reads 0; real numbers appear in a live terminal session.

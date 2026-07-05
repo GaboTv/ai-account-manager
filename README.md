@@ -30,8 +30,16 @@ and the rationale behind every major decision.
 - **Interactive terminals** over WebSocket (xterm.js) with a real PTY.
 - **Per-day usage dashboard**: usage is captured via the free `/usage` (Claude)
   and `/status` (Codex) slash commands, snapshotted into Postgres, and charted
-  by day of the month. The accounts list auto-refreshes every 10 s with a live
-  "updated Xs ago" label.
+  by day of the month.
+
+  > **Two refresh rates — don't confuse them.** The accounts page **re-reads and
+  > re-renders every 10 s** (a cheap DB read) so the values and the "updated Xs
+  > ago" label stay live — but this does **not** capture new data. The actual
+  > **usage capture** (which boots the CLI's `/usage`//`/status` panel, ~30 s per
+  > account) runs on the backend poller every **`USAGE_POLL_MINUTES`** (default
+  > **2 min**), or immediately when you click the **📊 Usage** button. So the
+  > numbers change at most every 2 minutes; the 10 s tick only refreshes the
+  > display.
 - **Credit-safe by design**: nothing automated ever sends a billable prompt.
   Only the free slash commands run on a schedule; message/exec paths are manual
   and clearly marked.
@@ -96,7 +104,7 @@ Set in `docker-compose.yml` (backend service):
 | Env var | Default | Purpose |
 |---|---|---|
 | `RUNNER_TZ` | `Europe/Madrid` | Timezone the CLIs render usage/reset times in |
-| `USAGE_POLL_MINUTES` | `15` | Auto usage-capture interval (`0` disables) |
+| `USAGE_POLL_MINUTES` | `2` | How often the backend re-captures usage (`0` disables). Not the display refresh — the accounts page re-renders every 10 s regardless. |
 | `DATABASE_URL` | compose-provided | Postgres connection |
 
 ## Using it
