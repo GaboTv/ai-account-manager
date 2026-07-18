@@ -44,6 +44,7 @@ services:
 
   frontend:
     build: ./frontend
+    command: npm run dev  # hot reload locally; the image's CMD is `npm start` (production)
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000
     ports:

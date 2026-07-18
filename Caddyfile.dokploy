@@ -1,0 +1,15 @@
+# Plain-HTTP variant of ./Caddyfile for Dokploy: TLS terminates at the
+# Cloudflare edge and Dokploy's Traefik; Caddy only does the same-origin
+# path routing so the auth cookie stays first-party and there is no CORS.
+
+:80 {
+	# API + WebSockets: strip the /api prefix and proxy to the backend.
+	handle_path /api/* {
+		reverse_proxy backend:8000
+	}
+
+	# Everything else is the Next.js frontend.
+	handle {
+		reverse_proxy frontend:3000
+	}
+}

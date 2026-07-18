@@ -1,0 +1,63 @@
+# Dokploy deployment (see DEPLOYMENT.md). Standalone compose, not an overlay.
+# No host ports: the only way in is Dokploy Traefik -> proxy:80 on
+# dokploy-network. Secrets come from Dokploy environment variables.
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: aimgr
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: aimgr
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/001_init.sql:/docker-entrypoint-initdb.d/001_init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aimgr"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg://aimgr:${POSTGRES_PASSWORD}@db:5432/aimgr
+      DOCKER_HOST: unix:///var/run/docker.sock
+      RUNNER_TZ: Europe/Madrid
+      USAGE_POLL_MINUTES: 2
+      APP_USERNAME: ${APP_USERNAME}
+      APP_PASSWORD: ${APP_PASSWORD}
+      APP_SECRET: ${APP_SECRET}
+      APP_COOKIE_SECURE: "1"
+    volumes:
+      # Docker socket ONLY here (control plane). Never in runner containers.
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: https://accounts.terceros.ch/api
+    restart: unless-stopped
+
+  proxy:
+    image: caddy:2
+    depends_on: [frontend, backend]
+    volumes:
+      - ./Caddyfile.dokploy:/etc/caddy/Caddyfile:ro
+    networks:
+      - default
+      - dokploy-network
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+
+networks:
+  dokploy-network:
+    external: true
