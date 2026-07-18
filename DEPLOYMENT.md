@@ -35,8 +35,8 @@ docker build -f docker/grok.Dockerfile   -t ai-runner-grok:latest   docker/
 ```
 
 CLI updates are automatic after that: a host cron entry (user `claude`,
-daily 04:45) runs `scripts/update-runners.sh`, which rebuilds both images
-with `--no-cache` and, only when a CLI version actually changed, recreates
+daily 04:45) runs `scripts/update-runners.sh`, which rebuilds every runner
+image with `--no-cache` and, only when a CLI version actually changed, recreates
 the affected account containers through the app's API (auth/workspace
 volumes survive, so logins persist; any open terminal session on an updated
 account is dropped). Log: `/home/claude/aimgr-update-runners.log`.

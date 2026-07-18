@@ -5,7 +5,7 @@ containers**. Each account runs in its own hardened container with its own
 persistent auth and workspace volumes. Create accounts, run guided logins,
 open interactive terminals, and track per-day usage — all from one UI.
 
-Supports three providers:
+Supports four providers:
 
 | Provider | CLI | Auth | Runner image |
 |---|---|---|---|
@@ -26,12 +26,13 @@ and the rationale behind every major decision.
   progress bar build the container, then complete login in an embedded terminal.
 - **Container lifecycle**: create / start / stop / restart / delete, status, logs.
 - **Login flows** per provider: Claude paste-back code, Codex localhost-callback
-  forwarding, AI Prime Tech API-key entry. Onboarding prompts (theme, account
-  type) are auto-answered where the flow is automated.
+  forwarding, AI Prime Tech API-key entry, Grok device code (confirm in the
+  browser, nothing to paste). Onboarding prompts (theme, account type) are
+  auto-answered where the flow is automated.
 - **Interactive terminals** over WebSocket (xterm.js) with a real PTY.
-- **Per-day usage dashboard**: usage is captured via the free `/usage` (Claude)
-  and `/status` (Codex) slash commands, snapshotted into Postgres, and charted
-  by day of the month.
+- **Per-day usage dashboard**: usage is captured via the free `/usage` (Claude),
+  `/status` (Codex), and `/usage show` (Grok) slash commands, snapshotted into
+  Postgres, and charted by day of the month.
 
   > **Two refresh rates — don't confuse them.** The accounts page **re-reads and
   > re-renders every 10 s** (a cheap DB read) so the values and the "updated Xs
@@ -144,6 +145,8 @@ ports still work without this overlay.
      page — paste that full URL into the field to forward it to the CLI.
    - **AI Prime Tech**: paste your `sk-` API key; it's written only to the
      account's home volume (`~/.aiprimetech.env`), never the database.
+   - **Grok**: open the printed `accounts.x.ai` URL and confirm the code in
+     your browser — the CLI finishes by itself; nothing to paste back.
 3. **Verify** — the wizard checks auth via each provider's status command.
 4. **Use** — open a terminal (⌨), or watch usage on the dashboard. The **/usage**
    and **/status** buttons are free; sending a message consumes credits and is

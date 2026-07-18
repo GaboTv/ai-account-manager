@@ -1,8 +1,8 @@
 # AI Account Manager — Architecture
 
 A Portainer-style control plane for managing isolated Claude Code, Codex CLI,
-and AI Prime Tech accounts, each in its own Docker container with its own
-persistent auth + workspace volumes.
+AI Prime Tech, and Grok Build accounts, each in its own Docker container with
+its own persistent auth + workspace volumes.
 
 ## System overview
 
@@ -41,7 +41,7 @@ Docker Engine
 | Structured errors | `backend/app/errors.py` |
 | DB models + audit helper | `backend/app/db.py` |
 | Schema | `db/001_init.sql` |
-| Runner images | `docker/claude.Dockerfile`, `docker/codex.Dockerfile` |
+| Runner images | `docker/claude.Dockerfile`, `docker/codex.Dockerfile`, `docker/grok.Dockerfile` |
 | Create wizard | `frontend/app/create/page.tsx` |
 | Accounts (cards, usage bars, auto-refresh) | `frontend/app/accounts/page.tsx` |
 | Dashboard (per-day usage charts) | `frontend/app/page.tsx`, `components/DailyUsageChart.tsx` |
@@ -54,6 +54,7 @@ Docker Engine
 | `claude` | Claude Code | `ai-runner-claude` | claude.ai OAuth; paste-back code in terminal |
 | `codex` | Codex CLI | `ai-runner-codex` | browser login; localhost:1455 callback forwarded into the container |
 | `aiprimetech` | Claude Code (drop-in) | `ai-runner-claude` | API key + base URL as env vars in the home volume |
+| `grok` | Grok Build (`@xai-official/grok`) | `ai-runner-grok` | device code via accounts.x.ai; CLI polls, no paste-back or callback |
 
 All provider-specific behavior is confined to `adapters.py`. `AiPrimeTechAdapter`
 subclasses `ClaudeAdapter` because it uses the same CLI; it overrides only auth
@@ -84,7 +85,8 @@ are real environment variables.
 - **Decision:** Per provider, the safest containerized flow. Claude uses
   paste-back code; Codex uses browser login with the localhost callback
   **forwarded into the container** (validated host/port/path); AI Prime Tech
-  needs no login at all (API key).
+  needs no login at all (API key); Grok is a pure device-code flow (confirm
+  in the browser, the CLI polls until authorized).
 - **Reason:** Containers can't receive browser callbacks directly.
 - **Risk:** CLI flag/wording changes — isolated in adapters.
 
@@ -141,9 +143,9 @@ are real environment variables.
 ### Credit safety
 Nothing automated ever sends a billable prompt. The usage poller and the
 "Refresh usage" button run only the free TUI slash commands: `/usage` (Claude,
-AI Prime Tech) and `/status` (Codex). The message and `exec` paths (`claude -p`,
-`codex exec`) consume credits, are manual only, and are visibly flagged
-(amber button + confirm dialog).
+AI Prime Tech), `/status` (Codex), and `/usage show` (Grok). The message and
+`exec` paths (`claude -p`, `codex exec`, `grok -p`) consume credits, are
+manual only, and are visibly flagged (amber button + confirm dialog).
 
 ### Security checklist
 - [x] Non-root runner user; `no-new-privileges` + `cap_drop ALL`
@@ -168,7 +170,7 @@ AI Prime Tech) and `/status` (Codex). The message and `exec` paths (`claude -p`,
 - **`ai_accounts`** — provider, name, container/volume names, limits, status,
   `auth_status`, `auth_info` (JSONB: method/base_url/email/plan — no tokens),
   `usage_info` (JSONB: parsed limits + session stats). `provider` CHECK allows
-  `claude`/`codex`/`aiprimetech`.
+  `claude`/`codex`/`aiprimetech`/`grok`.
 - **`usage_snapshots`** — a point-in-time copy of parsed limits on every
   capture; feeds the per-day dashboard. FK cascades on account delete.
 - **`ai_sessions`**, **`ai_command_runs`** (redacted), **`audit_events`**
@@ -192,6 +194,11 @@ Schema changes since v1 are applied by idempotent startup migrations in
 - **AI Prime Tech**: no terminal login — an API-key form → `/accounts/{id}/setkey`
   writes `~/.aiprimetech.env` (base URL, token, `CLAUDE_CODE_*` flags) into the
   home volume.
+- **Grok**: `grok login --device-auth` prints an `accounts.x.ai` URL + device
+  code; the user confirms in the browser and the CLI polls to completion — no
+  input field needed. Auth lands in `~/.grok/auth.json` in the home volume;
+  the status probe checks that file (printing only email/auth_mode via node,
+  never tokens) because grok 0.2.x has no `login status` command.
 
 ## Usage / status capture
 
@@ -200,7 +207,11 @@ Schema changes since v1 are applied by idempotent startup migrations in
   a `post_wait` for server-fetched panels), and returns the drawn text.
 - Adapters parse limit gauges (`used_percent`, `resets`) and session stats
   (cost, input/output tokens). Codex reports "% left" (normalized to used);
-  Claude reports "% used". Reset times render in `RUNNER_TZ`.
+  Claude reports "% used". Grok redraws its TUI with cursor moves instead of
+  newlines, so its adapter regexes the panel fields ("Weekly limit: N%",
+  "Next reset: …") straight out of the flattened text; the reported value is
+  the weekly pool shared across all Grok products. Reset times render in
+  `RUNNER_TZ`.
 - **Two distinct refresh rates:**
   - *Data capture* — a background poller re-captures usage for running,
     logged-in accounts every `USAGE_POLL_MINUTES` (default **2 min**) and
