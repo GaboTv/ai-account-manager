@@ -118,10 +118,16 @@ class DockerService:
 
     def status(self, container_name: str) -> dict:
         c = self._get(container_name)
+        try:
+            image = c.image.tags[0] if c.image.tags else c.image.short_id
+        except docker.errors.NotFound:
+            # The image was untagged/pruned while the container kept running
+            # (e.g. a runner update); fall back to the name it was created from.
+            image = c.attrs["Config"]["Image"]
         return {
             "status": c.status,
             "id": c.short_id,
-            "image": c.image.tags[0] if c.image.tags else c.image.short_id,
+            "image": image,
             "started_at": c.attrs["State"].get("StartedAt"),
         }
 
