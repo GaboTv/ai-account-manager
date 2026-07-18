@@ -371,11 +371,13 @@ class GrokAdapter(AIProviderAdapter):
         return ["grok", "-p", prompt]  # single-turn, prints and exits
 
     def usage_slash_command(self):
-        return "/usage"
+        # Bare "/usage" opens a show|manage submenu; "show" renders the panel
+        # ("Weekly limit: N%" + "Next reset: <date>").
+        return "/usage show"
 
     def status_slash_command(self):
-        # No separate /status in the TUI; /usage carries the limit info.
-        return "/usage"
+        # No separate /status in the TUI; the usage panel is the status.
+        return "/usage show"
 
     capture_responders = [
         (r"do you trust|trust this (folder|directory)|without asking", b"\r"),

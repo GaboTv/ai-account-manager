@@ -194,3 +194,13 @@ def test_grok_login_parse():
     assert hint.user_code == "WW6A-3NFW"
     assert hint.method == "device_code"
     assert hint.wants_code_input is False
+
+
+def test_grok_usage_parse():
+    # Panel text as rendered by `/usage show` (grok 0.2.103, real capture).
+    from app.adapters import GrokAdapter
+    out = "  Weekly limit: 13%\n  Next reset: July 21, 20:16\n"
+    parsed = GrokAdapter().parse_usage(out)
+    assert parsed["limits"] == [
+        {"label": "Weekly limit", "used_percent": 13, "resets": "July 21, 20:16"}
+    ]
