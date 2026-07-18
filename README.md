@@ -12,6 +12,7 @@ Supports three providers:
 | **Claude Code** | `@anthropic-ai/claude-code` | claude.ai OAuth (paste-back code) | `ai-runner-claude` |
 | **Codex CLI** | `@openai/codex` | browser login + localhost callback | `ai-runner-codex` |
 | **AI Prime Tech** | Claude Code (drop-in) | API key (env vars) | `ai-runner-claude` |
+| **Grok Build** | `@xai-official/grok` | device code (confirm in browser) | `ai-runner-grok` |
 
 > One reusable runner image **per provider**; one container + two volumes
 > **per account**. Never one image per account.
@@ -86,9 +87,10 @@ Prereqs: Docker Engine (Docker Desktop / WSL2 on Windows), and the runner
 images built once.
 
 ```bash
-# 1. Build the two runner images (rebuild after CLI upgrades)
+# 1. Build the runner images (rebuild after CLI upgrades)
 docker build -f docker/claude.Dockerfile -t ai-runner-claude:latest docker/
 docker build -f docker/codex.Dockerfile  -t ai-runner-codex:latest  docker/
+docker build -f docker/grok.Dockerfile   -t ai-runner-grok:latest   docker/
 
 # 2. Bring up db + backend + frontend
 docker compose up --build

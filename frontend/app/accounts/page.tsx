@@ -9,6 +9,7 @@ const PROVIDER_BADGE: Record<string, string> = {
   claude: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
   codex: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200",
   aiprimetech: "bg-violet-100 text-violet-800 dark:bg-violet-900 dark:text-violet-200",
+  grok: "bg-sky-100 text-sky-800 dark:bg-sky-900 dark:text-sky-200",
 };
 
 function agoLabel(iso: string | undefined, now: number): string {

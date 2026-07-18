@@ -317,6 +317,71 @@ class CodexAdapter(AIProviderAdapter):
         return hint
 
 
+class GrokAdapter(AIProviderAdapter):
+    """Grok Build (xAI), npm `@xai-official/grok`, binary `grok`.
+
+    Login is a pure device-code flow: `grok login --device-auth` prints
+    `https://accounts.x.ai/oauth2/device?user_code=XXXX-XXXX` plus the code,
+    then polls until the user confirms in the browser — no paste-back and no
+    localhost callback. Versioned against grok 0.2.103.
+    """
+    provider = "grok"
+    image = "ai-runner-grok:latest"
+
+    def login_command(self, method=None):
+        # The default browser flow needs a local browser; device-auth is the
+        # only flow that works from a headless container.
+        return ["grok", "login", "--device-auth"]
+
+    def setup_command(self):
+        return ["grok", "login", "--device-auth"]
+
+    def auth_status_command(self):
+        # grok 0.2.x has no `login status`-style command; the cached
+        # credentials file is the signal. UNCERTAIN: filename taken from
+        # binary strings ("credentials.json" under ~/.grok), not docs.
+        return ["sh", "-c",
+                'test -s "$HOME/.grok/credentials.json" && echo LOGGED_IN || echo NOT']
+
+    def is_logged_in(self, output, exit_code):
+        return "LOGGED_IN" in output
+
+    def parse_auth_status(self, output, exit_code):
+        return {"method": "device-oauth"} if "LOGGED_IN" in output else {}
+
+    def logout_command(self):
+        return ["grok", "logout"]
+
+    def interactive_command(self, initial_prompt=None):
+        return ["grok", initial_prompt] if initial_prompt else ["grok"]
+
+    def exec_command(self, prompt):
+        return ["grok", "-p", prompt]  # single-turn, prints and exits
+
+    def usage_slash_command(self):
+        return "/usage"
+
+    def status_slash_command(self):
+        # No separate /status in the TUI; /usage carries the limit info.
+        return "/usage"
+
+    capture_responders = [
+        (r"do you trust|trust this (folder|directory)|without asking", b"\r"),
+    ]
+
+    _USER_CODE_RE = re.compile(r"\b([A-Z0-9]{4,8}-[A-Z0-9]{4,8})\b")
+
+    def parse_login_output(self, text: str) -> LoginHint:
+        text = strip_ansi(text)
+        hint = LoginHint(method="device_code")
+        urls = [u for u in _URL_RE.findall(text) if "x.ai" in u]
+        if urls:
+            hint.login_url = urls[0].rstrip(".,)")
+        if m := self._USER_CODE_RE.search(text):
+            hint.user_code = m.group(1)
+        return hint
+
+
 class AiPrimeTechAdapter(ClaudeAdapter):
     """aiprimetech.io — a drop-in Claude API replacement using the same Claude
     Code CLI. No OAuth: auth is env vars (ANTHROPIC_BASE_URL,
@@ -365,6 +430,7 @@ ADAPTERS: dict[str, AIProviderAdapter] = {
     "claude": ClaudeAdapter(),
     "codex": CodexAdapter(),
     "aiprimetech": AiPrimeTechAdapter(),
+    "grok": GrokAdapter(),
 }
 
 

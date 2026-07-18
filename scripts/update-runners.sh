@@ -19,7 +19,8 @@ cli_version() { # image cli
 
 changed_images=()
 for spec in "ai-runner-claude:latest claude claude.Dockerfile" \
-            "ai-runner-codex:latest codex codex.Dockerfile"; do
+            "ai-runner-codex:latest codex codex.Dockerfile" \
+            "ai-runner-grok:latest grok grok.Dockerfile"; do
   read -r image cli dockerfile <<<"$spec"
   old=$(cli_version "$image" "$cli" || echo "none")
   docker build --pull --no-cache -q -f "$REPO_DIR/docker/$dockerfile" -t "$image" "$REPO_DIR/docker/" >/dev/null

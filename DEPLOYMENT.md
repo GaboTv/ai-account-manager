@@ -31,6 +31,7 @@ services, the backend spawns them via the Docker socket.
 cd /home/claude/projects/ai-account-manager
 docker build -f docker/claude.Dockerfile -t ai-runner-claude:latest docker/
 docker build -f docker/codex.Dockerfile  -t ai-runner-codex:latest  docker/
+docker build -f docker/grok.Dockerfile   -t ai-runner-grok:latest   docker/
 ```
 
 CLI updates are automatic after that: a host cron entry (user `claude`,

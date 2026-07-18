@@ -8,7 +8,7 @@ export const wsUrl = (path: string) => `${WS}${path}`;
 
 export interface Account {
   id: string;
-  provider: "claude" | "codex" | "aiprimetech";
+  provider: "claude" | "codex" | "aiprimetech" | "grok";
   name: string;
   container_name: string;
   status: string;

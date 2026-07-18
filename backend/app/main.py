@@ -219,13 +219,13 @@ def startup():
             "ALTER TABLE ai_accounts ADD COLUMN IF NOT EXISTS "
             "usage_info JSONB NOT NULL DEFAULT '{}'"
         ))
-        # Allow the aiprimetech provider (001_init.sql only listed claude/codex).
+        # Allow providers added after 001_init.sql (aiprimetech, grok).
         conn.execute(text(
             "ALTER TABLE ai_accounts DROP CONSTRAINT IF EXISTS ai_accounts_provider_check"
         ))
         conn.execute(text(
             "ALTER TABLE ai_accounts ADD CONSTRAINT ai_accounts_provider_check "
-            "CHECK (provider IN ('claude','codex','aiprimetech'))"
+            "CHECK (provider IN ('claude','codex','aiprimetech','grok'))"
         ))
         # usage_snapshots is created by create_all without ON DELETE CASCADE,
         # so its rows block account deletion. Swap the FK for a cascading one.

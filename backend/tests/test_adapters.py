@@ -157,3 +157,36 @@ def test_logged_in_heuristic():
     assert a.is_logged_in("Logged in as x@y.com", 0)
     assert not a.is_logged_in("Not logged in", 1)
     assert not a.is_logged_in("You are not logged in", 0)
+
+
+def test_grok_adapter():
+    from app.adapters import GrokAdapter
+    a = GrokAdapter()
+    assert a.provider == "grok"
+    assert a.image == "ai-runner-grok:latest"
+    assert a.login_command() == ["grok", "login", "--device-auth"]
+    assert a.setup_command() == ["grok", "login", "--device-auth"]
+    assert a.needs_callback_field is False
+    assert a.exec_command("hi") == ["grok", "-p", "hi"]
+    assert a.interactive_command() == ["grok"]
+    assert a.usage_slash_command() == "/usage"
+    assert a.is_logged_in("LOGGED_IN\n", 0)
+    assert not a.is_logged_in("NOT\n", 0)
+    assert get_adapter("grok") is not None
+
+
+def test_grok_login_parse():
+    # Verbatim `grok login --device-auth` output (grok 0.2.103).
+    out = (
+        "\nTo sign in, open this URL in your browser:\n\n"
+        "  https://accounts.x.ai/oauth2/device?user_code=WW6A-3NFW\n\n"
+        "  (Could not open browser automatically — open the URL above manually.)\n\n"
+        "Confirm this code in your browser:\n\n  WW6A-3NFW\n\n"
+        "Waiting for authorization...\n"
+    )
+    from app.adapters import GrokAdapter
+    hint = GrokAdapter().parse_login_output(out)
+    assert hint.login_url == "https://accounts.x.ai/oauth2/device?user_code=WW6A-3NFW"
+    assert hint.user_code == "WW6A-3NFW"
+    assert hint.method == "device_code"
+    assert hint.wants_code_input is False

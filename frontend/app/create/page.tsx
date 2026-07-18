@@ -21,12 +21,17 @@ const PROVIDERS = [
     title: "AI Prime Tech",
     blurb: "Drop-in Claude API replacement (aiprimetech.io). No login — just paste your API key. Uses the Claude Code CLI.",
   },
+  {
+    id: "grok" as const,
+    title: "Grok Build",
+    blurb: "xAI's coding CLI. Open the printed URL, confirm the code in your browser — no paste-back needed.",
+  },
 ];
 
 type Step = "form" | "creating" | "terminal" | "done";
 
 export default function CreatePage() {
-  const [provider, setProvider] = useState<"claude" | "codex" | "aiprimetech">("claude");
+  const [provider, setProvider] = useState<"claude" | "codex" | "aiprimetech" | "grok">("claude");
   const [name, setName] = useState("");
   const [step, setStep] = useState<Step>("form");
   const [pct, setPct] = useState(0);
@@ -241,6 +246,12 @@ export default function CreatePage() {
                 <li>Open the printed URL in your browser and authorize.</li>
                 <li>Copy the code Claude shows you and paste it in the <b>field below</b>, then press Send (or type it directly in the terminal).</li>
               </ol>
+            ) : provider === "grok" ? (
+              <ol className="list-decimal space-y-1 pl-5">
+                <li>Open the printed URL in your browser and sign in with your X / SuperGrok account.</li>
+                <li>Confirm that the code in the browser matches the one in the terminal.</li>
+                <li>Wait for the terminal to report it's signed in, then press <b>Verify login</b>.</li>
+              </ol>
             ) : (
               <ol className="list-decimal space-y-1 pl-5">
                 <li>Open the printed URL in your browser and sign in.</li>
@@ -271,7 +282,7 @@ export default function CreatePage() {
               </div>
               {callbackMsg && <div className="text-sm text-gray-500">{callbackMsg}</div>}
             </div>
-          ) : (
+          ) : provider === "grok" ? null : ( // grok: confirmation happens in the browser, nothing to paste
             <div className="space-y-1">
               <form
                 className="flex gap-2"
