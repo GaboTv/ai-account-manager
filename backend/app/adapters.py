@@ -383,6 +383,22 @@ class GrokAdapter(AIProviderAdapter):
         (r"do you trust|trust this (folder|directory)|without asking", b"\r"),
     ]
 
+    def parse_usage(self, text):
+        # Grok's TUI redraws via cursor moves, not newlines, so after ANSI
+        # stripping the panel collapses into one long line the generic
+        # line-based parser can't segment. Match the panel fields directly:
+        # "Weekly limit: 13%" ... "Next reset: July 21, 20:16".
+        out = super().parse_usage(text)
+        if not out.get("limits"):
+            clean = strip_ansi(text)
+            if m := re.search(r"Weekly limit:\s*(\d{1,3})\s*%", clean):
+                entry = {"label": "Weekly limit", "used_percent": int(m.group(1))}
+                if r := re.search(
+                        r"Next reset:\s*([A-Za-z]+\s+\d{1,2},\s*\d{1,2}:\d{2})", clean):
+                    entry["resets"] = r.group(1)
+                out["limits"] = [entry]
+        return out
+
     _USER_CODE_RE = re.compile(r"\b([A-Z0-9]{4,8}-[A-Z0-9]{4,8})\b")
 
     def parse_login_output(self, text: str) -> LoginHint:

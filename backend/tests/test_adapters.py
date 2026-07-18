@@ -204,3 +204,16 @@ def test_grok_usage_parse():
     assert parsed["limits"] == [
         {"label": "Weekly limit", "used_percent": 13, "resets": "July 21, 20:16"}
     ]
+
+
+def test_grok_usage_parse_single_line_redraw():
+    # The TUI redraws with cursor moves; ANSI-stripped output is one long
+    # line with the panel buried mid-line (verbatim tail of a real capture).
+    from app.adapters import GrokAdapter
+    out = ("/usageshowEnter:send  │  Alt+Enter:newline  │  Shift+Tab:mode  │  "
+           "Ctrl+x:shortcuts        2.9K / 500K       Shift+Tab:mode │  "
+           "Ctrl+x:shortcuts     Weekly limit: 13%Next reset: July 21, 20:16")
+    parsed = GrokAdapter().parse_usage(out)
+    assert parsed["limits"] == [
+        {"label": "Weekly limit", "used_percent": 13, "resets": "July 21, 20:16"}
+    ]
