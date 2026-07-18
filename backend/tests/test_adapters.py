@@ -170,8 +170,12 @@ def test_grok_adapter():
     assert a.exec_command("hi") == ["grok", "-p", "hi"]
     assert a.interactive_command() == ["grok"]
     assert a.usage_slash_command() == "/usage"
-    assert a.is_logged_in("LOGGED_IN\n", 0)
+    assert a.is_logged_in("LOGGED_IN user@x.com credentials\n", 0)
     assert not a.is_logged_in("NOT\n", 0)
+    assert a.auth_status_command()[0] == "node"
+    assert a.parse_auth_status("LOGGED_IN user@x.com credentials", 0) == {
+        "email": "user@x.com", "method": "credentials"}
+    assert a.parse_auth_status("NOT", 0) == {}
     assert get_adapter("grok") is not None
 
 

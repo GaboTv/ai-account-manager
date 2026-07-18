@@ -336,18 +336,30 @@ class GrokAdapter(AIProviderAdapter):
     def setup_command(self):
         return ["grok", "login", "--device-auth"]
 
+    # grok 0.2.x has no `login status`-style command; ~/.grok/auth.json is
+    # the signal (verified against a real login: keyed by issuer::client_id,
+    # entries carry email/auth_mode/refresh_token). Print only non-secret
+    # fields — node ships in the runner image.
+    _STATUS_JS = (
+        'try{const a=require(process.env.HOME+"/.grok/auth.json");'
+        'const e=Object.values(a)[0]||{};'
+        'console.log((e.refresh_token||e.key)?'
+        '"LOGGED_IN "+(e.email||"")+" "+(e.auth_mode||""):"NOT")}'
+        'catch{console.log("NOT")}'
+    )
+
     def auth_status_command(self):
-        # grok 0.2.x has no `login status`-style command; the cached
-        # credentials file is the signal. UNCERTAIN: filename taken from
-        # binary strings ("credentials.json" under ~/.grok), not docs.
-        return ["sh", "-c",
-                'test -s "$HOME/.grok/credentials.json" && echo LOGGED_IN || echo NOT']
+        return ["node", "-e", self._STATUS_JS]
 
     def is_logged_in(self, output, exit_code):
         return "LOGGED_IN" in output
 
     def parse_auth_status(self, output, exit_code):
-        return {"method": "device-oauth"} if "LOGGED_IN" in output else {}
+        m = re.search(r"LOGGED_IN\s*(\S*)\s*(\S*)", strip_ansi(output))
+        if not m:
+            return {}
+        fields = {"email": m.group(1), "method": m.group(2) or "device-oauth"}
+        return {k: v for k, v in fields.items() if v}
 
     def logout_command(self):
         return ["grok", "logout"]
