@@ -25,14 +25,20 @@ be absolute (the WS URL is derived from it by `http`->`ws` replace in
 ## 1. One-time host prep (SSH, as `claude`)
 
 Build the runner images. Dokploy will not build these - they are not compose
-services, the backend spawns them via the Docker socket. Rebuild after CLI
-upgrades.
+services, the backend spawns them via the Docker socket.
 
 ```bash
 cd /home/claude/projects/ai-account-manager
 docker build -f docker/claude.Dockerfile -t ai-runner-claude:latest docker/
 docker build -f docker/codex.Dockerfile  -t ai-runner-codex:latest  docker/
 ```
+
+CLI updates are automatic after that: a host cron entry (user `claude`,
+daily 04:45) runs `scripts/update-runners.sh`, which rebuilds both images
+with `--no-cache` and, only when a CLI version actually changed, recreates
+the affected account containers through the app's API (auth/workspace
+volumes survive, so logins persist; any open terminal session on an updated
+account is dropped). Log: `/home/claude/aimgr-update-runners.log`.
 
 ## 2. Repo changes (commit before deploying)
 
